@@ -1,37 +1,37 @@
 [package]
-name = "pilota"
-version = "0.13.0"
-edition.workspace = true
-homepage.workspace = true
-repository.workspace = true
-license.workspace = true
 authors.workspace = true
-rust-version.workspace = true
+categories = ["encoding"]
 description = "Pilota is a thrift and protobuf implementation in pure rust with high performance and extensibility."
 documentation = "https://docs.rs/pilota"
-readme = "README.md"
-categories = ["encoding"]
+edition.workspace = true
+homepage.workspace = true
 keywords = ["serialization", "thrift", "protobuf"]
+license.workspace = true
+name = "pilota"
+readme = "README.md"
+repository.workspace = true
+rust-version.workspace = true
+version = "0.13.1"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [badges]
-maintenance = { status = "actively-developed" }
+maintenance = {status = "actively-developed"}
 
 [dependencies]
-ahash = { workspace = true, features = ["serde"] }
+ahash = {workspace = true, features = ["serde"]}
 anyhow.workspace = true
 async-recursion.workspace = true
 bytes.workspace = true
-faststr = { workspace = true, features = ["serde"] }
+faststr = {workspace = true, features = ["serde"]}
 integer-encoding.workspace = true
 lazy_static.workspace = true
 linkedbytes.workspace = true
 ordered-float.workspace = true
 paste.workspace = true
 protobuf.workspace = true
-smallvec.workspace = true
 serde.workspace = true
+smallvec.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
@@ -41,26 +41,26 @@ proptest.workspace = true
 rand.workspace = true
 
 [features]
-unstable = []
-pb-encode-default-value = []
 no-recursion-limit = []
+pb-encode-default-value = []
+unstable = []
 
 [[bench]]
+harness = false
 name = "faststr"
-harness = false
 
 [[bench]]
+harness = false
 name = "thrift_binary"
-harness = false
 
 [[bench]]
+harness = false
 name = "skip"
-harness = false
 
 [[bench]]
+harness = false
 name = "ttype"
-harness = false
 
 [[bench]]
-name = "pb"
 harness = false
+name = "pb"

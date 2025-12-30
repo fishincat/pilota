@@ -1,7 +1,7 @@
 use std::{convert::TryInto, str};
 
 use bytes::{Bytes, BytesMut};
-use faststr::FastStr;
+use faststr::{BytesRef, FastStr};
 use linkedbytes::LinkedBytes;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
@@ -565,6 +565,205 @@ impl TOutputProtocol for TBinaryProtocol<&mut LinkedBytes> {
 
 impl TInputProtocol for TBinaryProtocol<&mut Bytes> {
     type Buf = Bytes;
+
+    fn read_message_begin(&mut self) -> Result<TMessageIdentifier, ThriftException> {
+        let size = self.trans.read_i32()?;
+
+        if size > 0 {
+            return Err(new_protocol_exception(
+                ProtocolExceptionKind::BadVersion,
+                "Missing version in ReadMessageBegin".to_string(),
+            ));
+        }
+        let type_u8 = (size & 0xf) as u8;
+
+        let message_type = TMessageType::try_from(type_u8).map_err(|_| {
+            new_protocol_exception(
+                ProtocolExceptionKind::InvalidData,
+                format!("invalid message type {type_u8}"),
+            )
+        })?;
+
+        let version = size & (VERSION_MASK as i32);
+        if version != (VERSION_1 as i32) {
+            return Err(new_protocol_exception(
+                ProtocolExceptionKind::BadVersion,
+                "Bad version in ReadMessageBegin",
+            ));
+        }
+
+        let name = self.read_faststr()?;
+
+        let sequence_number = self.read_i32()?;
+        Ok(TMessageIdentifier::new(name, message_type, sequence_number))
+    }
+
+    #[inline]
+    fn read_message_end(&mut self) -> Result<(), ThriftException> {
+        Ok(())
+    }
+
+    #[inline]
+    fn read_struct_begin(&mut self) -> Result<Option<TStructIdentifier>, ThriftException> {
+        Ok(None)
+    }
+
+    #[inline]
+    fn read_struct_end(&mut self) -> Result<(), ThriftException> {
+        Ok(())
+    }
+
+    #[inline]
+    fn read_field_begin(&mut self) -> Result<TFieldIdentifier, ThriftException> {
+        let field_type_byte = self.read_byte()?;
+        let field_type = field_type_byte.try_into().map_err(|_| {
+            new_protocol_exception(
+                ProtocolExceptionKind::InvalidData,
+                format!("invalid ttype {field_type_byte}"),
+            )
+        })?;
+        let id = match field_type {
+            TType::Stop => Ok(0),
+            _ => self.read_i16(),
+        }?;
+        Ok(TFieldIdentifier::new::<Option<&'static str>, i16>(
+            None, field_type, id,
+        ))
+    }
+
+    #[inline]
+    fn read_field_end(&mut self) -> Result<(), ThriftException> {
+        Ok(())
+    }
+
+    #[inline]
+    fn read_bool(&mut self) -> Result<bool, ThriftException> {
+        let b = self.read_i8()?;
+        match b {
+            0 => Ok(false),
+            _ => Ok(true),
+        }
+    }
+
+    #[inline]
+    fn read_bytes(&mut self) -> Result<Bytes, ThriftException> {
+        let len = self.trans.read_i32()?;
+        // split and freeze it
+        Ok(self.trans.split_to(len as usize))
+    }
+
+    #[inline]
+    fn get_bytes(&mut self, ptr: Option<*const u8>, len: usize) -> Result<Bytes, ThriftException> {
+        if let Some(ptr) = ptr {
+            Ok(Bytes::copy_from_slice(unsafe {
+                std::slice::from_raw_parts(ptr, len)
+            }))
+        } else {
+            Ok(self.trans.split_to(len))
+        }
+    }
+
+    #[inline]
+    fn read_uuid(&mut self) -> Result<[u8; 16], ThriftException> {
+        let mut u = [0; 16];
+        self.trans.read_to_slice(&mut u)?;
+        Ok(u)
+    }
+
+    #[inline]
+    fn read_i8(&mut self) -> Result<i8, ThriftException> {
+        Ok(self.trans.read_i8()?)
+    }
+
+    #[inline]
+    fn read_i16(&mut self) -> Result<i16, ThriftException> {
+        Ok(self.trans.read_i16()?)
+    }
+
+    #[inline]
+    fn read_i32(&mut self) -> Result<i32, ThriftException> {
+        Ok(self.trans.read_i32()?)
+    }
+
+    #[inline]
+    fn read_i64(&mut self) -> Result<i64, ThriftException> {
+        Ok(self.trans.read_i64()?)
+    }
+
+    #[inline]
+    fn read_double(&mut self) -> Result<f64, ThriftException> {
+        Ok(self.trans.read_f64()?)
+    }
+
+    #[inline]
+    fn read_string(&mut self) -> Result<String, ThriftException> {
+        let len = self.trans.read_i32()?;
+        Ok(self.trans.read_to_string(len as usize)?)
+    }
+
+    #[inline]
+    fn read_faststr(&mut self) -> Result<FastStr, ThriftException> {
+        let len = self.trans.read_i32()? as usize;
+        let bytes = self.trans.split_to(len);
+        unsafe { Ok(FastStr::from_bytes_unchecked(bytes)) }
+    }
+
+    #[inline]
+    fn read_list_begin(&mut self) -> Result<TListIdentifier, ThriftException> {
+        let element_type: TType = self.read_byte().and_then(|n| Ok(field_type_from_u8(n)?))?;
+        let size = self.read_i32()?;
+        Ok(TListIdentifier::new(element_type, size as usize))
+    }
+
+    #[inline]
+    fn read_list_end(&mut self) -> Result<(), ThriftException> {
+        Ok(())
+    }
+
+    #[inline]
+    fn read_set_begin(&mut self) -> Result<TSetIdentifier, ThriftException> {
+        let element_type: TType = self.read_byte().and_then(|n| Ok(field_type_from_u8(n)?))?;
+        let size = self.read_i32()?;
+        Ok(TSetIdentifier::new(element_type, size as usize))
+    }
+
+    #[inline]
+    fn read_set_end(&mut self) -> Result<(), ThriftException> {
+        Ok(())
+    }
+
+    #[inline]
+    fn read_map_begin(&mut self) -> Result<TMapIdentifier, ThriftException> {
+        let key_type: TType = self.read_byte().and_then(|n| Ok(field_type_from_u8(n)?))?;
+        let value_type: TType = self.read_byte().and_then(|n| Ok(field_type_from_u8(n)?))?;
+        let size = self.read_i32()?;
+        Ok(TMapIdentifier::new(key_type, value_type, size as usize))
+    }
+
+    #[inline]
+    fn read_map_end(&mut self) -> Result<(), ThriftException> {
+        Ok(())
+    }
+
+    #[inline]
+    fn read_byte(&mut self) -> Result<u8, ThriftException> {
+        Ok(self.trans.read_u8()?)
+    }
+
+    #[inline]
+    fn read_bytes_vec(&mut self) -> Result<Vec<u8>, ThriftException> {
+        let len = self.trans.read_i32()? as usize;
+        Ok(self.trans.split_to(len).into())
+    }
+
+    #[inline]
+    fn buf(&mut self) -> &mut Self::Buf {
+        self.trans
+    }
+}
+
+impl TInputProtocol for TBinaryProtocol<&mut BytesRef> {
+    type Buf = BytesRef;
 
     fn read_message_begin(&mut self) -> Result<TMessageIdentifier, ThriftException> {
         let size = self.trans.read_i32()?;

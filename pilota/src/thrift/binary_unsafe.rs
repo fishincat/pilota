@@ -1,7 +1,7 @@
 use std::{convert::TryInto, ptr, slice, str};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use faststr::FastStr;
+use faststr::{BytesRef, FastStr};
 use linkedbytes::LinkedBytes;
 use smallvec::SmallVec;
 
@@ -735,7 +735,7 @@ impl TOutputProtocol for TBinaryUnsafeOutputProtocol<&mut LinkedBytes> {
 }
 
 pub struct TBinaryUnsafeInputProtocol<'a> {
-    pub(crate) trans: &'a mut Bytes,
+    pub(crate) trans: &'a mut BytesRef,
     pub(crate) buf: &'a [u8],
     pub(crate) index: usize,
 }
@@ -745,7 +745,7 @@ impl<'a> TBinaryUnsafeInputProtocol<'a> {
     ///
     /// The 'trans' MUST have enough capacity to read from or write to.
     #[inline]
-    pub unsafe fn new(trans: &'a mut Bytes) -> Self {
+    pub unsafe fn new(trans: &'a mut BytesRef) -> Self {
         unsafe {
             let buf = slice::from_raw_parts(trans.as_ptr(), trans.len());
             Self {
@@ -911,7 +911,7 @@ macro_rules! skip_stack_pop {
 }
 
 impl<'a> TInputProtocol for TBinaryUnsafeInputProtocol<'a> {
-    type Buf = Bytes;
+    type Buf = BytesRef;
 
     fn read_message_begin(&mut self) -> Result<TMessageIdentifier, ThriftException> {
         let size = self.read_i32()?;
